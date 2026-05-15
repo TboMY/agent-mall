@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const AIProductCandidate = require('../models/AIProductCandidate');
 const Product = require('../models/Product');
+const { requirePermission } = require('../middleware/auth');
+const { PERMISSIONS } = require('../config/permissions');
+
+router.use(requirePermission(PERMISSIONS.AI_CANDIDATES_REVIEW));
 
 // 获取AI推荐候选商品列表
 router.get('/', async (req, res) => {
@@ -34,6 +38,25 @@ router.get('/', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取AI推荐候选商品列表失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取统计信息
+router.get('/stats/overview', async (req, res) => {
+  try {
+    const stats = await AIProductCandidate.getStats();
+    
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('获取统计信息失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取统计信息失败',
       error: error.message
     });
   }
@@ -189,25 +212,6 @@ router.post('/:id/convert', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '转换候选商品失败',
-      error: error.message
-    });
-  }
-});
-
-// 获取统计信息
-router.get('/stats/overview', async (req, res) => {
-  try {
-    const stats = await AIProductCandidate.getStats();
-    
-    res.json({
-      success: true,
-      data: stats
-    });
-  } catch (error) {
-    console.error('获取统计信息失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取统计信息失败',
       error: error.message
     });
   }

@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const ProductAttribute = require('../models/ProductAttribute');
 const { validate } = require('../middleware/validation');
+const { requirePermission } = require('../middleware/auth');
+const { PERMISSIONS } = require('../config/permissions');
 const Joi = require('joi');
 
 // 验证规则
@@ -109,7 +111,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // 创建属性
-router.post('/', validate(productAttributeSchema), async (req, res) => {
+router.post('/', requirePermission(PERMISSIONS.PRODUCT_ATTRIBUTES_MANAGE), validate(productAttributeSchema), async (req, res) => {
   try {
     const { values, ...attributeData } = req.body;
     const attributeId = await ProductAttribute.create(attributeData);
@@ -144,7 +146,7 @@ router.post('/', validate(productAttributeSchema), async (req, res) => {
 });
 
 // 更新属性
-router.put('/:id', validate(productAttributeSchema), async (req, res) => {
+router.put('/:id', requirePermission(PERMISSIONS.PRODUCT_ATTRIBUTES_MANAGE), validate(productAttributeSchema), async (req, res) => {
   try {
     const { id } = req.params;
     const { values, ...attributeData } = req.body;
@@ -194,7 +196,7 @@ router.put('/:id', validate(productAttributeSchema), async (req, res) => {
 });
 
 // 删除属性
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission(PERMISSIONS.PRODUCT_ATTRIBUTES_MANAGE), async (req, res) => {
   try {
     const { id } = req.params;
     const success = await ProductAttribute.delete(id);
@@ -241,7 +243,7 @@ router.get('/:id/values', async (req, res) => {
 });
 
 // 创建属性值
-router.post('/:id/values', validate(attributeValueSchema), async (req, res) => {
+router.post('/:id/values', requirePermission(PERMISSIONS.PRODUCT_ATTRIBUTES_MANAGE), validate(attributeValueSchema), async (req, res) => {
   try {
     const { id } = req.params;
     const valueId = await ProductAttribute.createValues(id, [req.body]);
@@ -262,7 +264,7 @@ router.post('/:id/values', validate(attributeValueSchema), async (req, res) => {
 });
 
 // 更新属性值
-router.put('/values/:valueId', validate(attributeValueSchema), async (req, res) => {
+router.put('/values/:valueId', requirePermission(PERMISSIONS.PRODUCT_ATTRIBUTES_MANAGE), validate(attributeValueSchema), async (req, res) => {
   try {
     const { valueId } = req.params;
     const success = await ProductAttribute.updateValue(valueId, req.body);
@@ -289,7 +291,7 @@ router.put('/values/:valueId', validate(attributeValueSchema), async (req, res) 
 });
 
 // 删除属性值
-router.delete('/values/:valueId', async (req, res) => {
+router.delete('/values/:valueId', requirePermission(PERMISSIONS.PRODUCT_ATTRIBUTES_MANAGE), async (req, res) => {
   try {
     const { valueId } = req.params;
     const success = await ProductAttribute.deleteValue(valueId);

@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const SystemConfig = require('../models/SystemConfig');
 const Scheduler = require('../services/Scheduler');
+const { requirePermission } = require('../middleware/auth');
+const { PERMISSIONS } = require('../config/permissions');
+
+router.use(requirePermission(PERMISSIONS.SYSTEM_CONFIGS_MANAGE));
 
 // 获取所有配置
 router.get('/', async (req, res) => {
@@ -53,6 +57,43 @@ router.get('/ai-workbench', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取AI工作台配置失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取首页展示配置
+router.get('/homepage-display', async (req, res) => {
+  try {
+    const config = await SystemConfig.getHomepageDisplayConfig();
+    res.json({
+      success: true,
+      data: config
+    });
+  } catch (error) {
+    console.error('获取首页展示配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取首页展示配置失败',
+      error: error.message
+    });
+  }
+});
+
+// 保存首页展示配置
+router.post('/homepage-display', async (req, res) => {
+  try {
+    const results = await SystemConfig.saveHomepageDisplayConfig(req.body || {});
+    res.json({
+      success: true,
+      message: '首页展示配置保存成功',
+      data: results
+    });
+  } catch (error) {
+    console.error('保存首页展示配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '保存首页展示配置失败',
       error: error.message
     });
   }

@@ -10,9 +10,8 @@ const productSchema = Joi.object({
   description: Joi.string().allow('').max(1000).messages({
     'string.max': '商品描述不能超过1000个字符'
   }),
-  price: Joi.number().min(0).precision(2).required().messages({
-    'number.min': '价格必须大于等于0',
-    'any.required': '价格不能为空'
+  price: Joi.number().min(0).precision(2).allow(null).messages({
+    'number.min': '价格必须大于等于0'
   }),
   original_price: Joi.number().min(0).precision(2).allow(null).messages({
     'number.min': '原价必须大于等于0'
@@ -33,7 +32,7 @@ const productSchema = Joi.object({
     'number.positive': '品牌ID必须是正整数'
   }),
   product_type_id: Joi.number().integer().positive().allow(null).messages({
-    'number.positive': '商品类型ID必须是正整数'
+    'number.positive': '规格模板ID必须是正整数'
   }),
   specifications: Joi.object().pattern(
     Joi.string(),
@@ -45,10 +44,30 @@ const productSchema = Joi.object({
   ).allow(null).messages({
     'object.base': '规格信息必须是对象格式'
   }),
-  sku: Joi.string().max(100).allow('').messages({
-    'string.max': 'SKU不能超过100个字符'
+  skus: Joi.array().items(
+    Joi.object({
+      sku_code: Joi.string().max(100).allow('', null),
+      sku_name: Joi.string().max(255).required(),
+      price: Joi.number().min(0).precision(2).required(),
+      original_price: Joi.number().min(0).precision(2).allow(null),
+      stock: Joi.number().integer().min(0).required(),
+      image: Joi.string().uri().allow('', null),
+      status: Joi.number().integer().valid(0, 1).default(1),
+      is_default: Joi.number().integer().valid(0, 1).default(0),
+      sort_order: Joi.number().integer().min(0).default(0),
+      specs: Joi.array().items(
+        Joi.object({
+          attribute_id: Joi.number().integer().positive().required(),
+          attribute_value_id: Joi.number().integer().positive().allow(null),
+          custom_value: Joi.string().allow('', null)
+        })
+      ).default([])
+    })
+  ).min(1).required().messages({
+    'array.min': '至少需要配置一个 SKU',
+    'any.required': '请配置 SKU 信息'
   }),
-  stock: Joi.number().integer().min(0).default(0).messages({
+  stock: Joi.number().integer().min(0).allow(null).messages({
     'number.min': '库存不能为负数'
   }),
   heat_score: Joi.number().integer().min(0).default(0).messages({
@@ -85,13 +104,6 @@ const categorySchema = Joi.object({
   }),
   parent_id: Joi.number().integer().min(0).default(0).messages({
     'number.min': '父分类ID不能为负数'
-  }),
-  level: Joi.number().integer().min(1).max(3).default(1).messages({
-    'number.min': '分类层级至少为1',
-    'number.max': '分类层级不能超过3'
-  }),
-  sort_order: Joi.number().integer().min(0).default(0).messages({
-    'number.min': '排序不能为负数'
   }),
   icon: Joi.string().uri().allow('').messages({
     'string.uri': '图标必须是有效的URL'

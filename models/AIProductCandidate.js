@@ -126,6 +126,10 @@ class AIProductCandidate {
   static async create(candidateData) {
     const {
       aweme_id,
+      source_content_id,
+      source_platform,
+      platform_content_id,
+      content_type = 'video',
       product_name,
       product_category,
       ai_reason,
@@ -139,13 +143,18 @@ class AIProductCandidate {
 
     const sql = `
       INSERT INTO ai_product_candidate (
-        aweme_id, product_name, product_category, ai_reason, hot_score,
+        aweme_id, source_content_id, source_platform, platform_content_id, content_type,
+        product_name, product_category, ai_reason, hot_score,
         cover_url, download_url, source_url, source_keyword, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
       aweme_id,
+      source_content_id || null,
+      source_platform || null,
+      platform_content_id || null,
+      content_type,
       product_name,
       product_category,
       ai_reason,
@@ -159,6 +168,17 @@ class AIProductCandidate {
 
     const result = await query(sql, params);
     return result.insertId;
+  }
+
+  static async getBySourceContentId(sourceContentId) {
+    const sql = `
+      SELECT *
+      FROM ai_product_candidate
+      WHERE source_content_id = ?
+      LIMIT 1
+    `;
+    const [candidate] = await query(sql, [sourceContentId]);
+    return candidate || null;
   }
 
   // 更新候选商品
@@ -231,7 +251,7 @@ class AIProductCandidate {
       heat_score: candidate.hot_score,
       is_ai_recommended: 1,
       ai_recommendation: candidate.ai_reason,
-      source_platform: 'douyin',
+      source_platform: candidate.source_platform || 'douyin',
       source_url: candidate.source_url,
       download_url: candidate.download_url,
       status: 1

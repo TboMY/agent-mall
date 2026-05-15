@@ -107,7 +107,7 @@ class SystemConfig {
         enabled: true,
         productCount: 15,
         executionTime: '00:00',
-        platforms: ['bilibili', 'douyin', 'xiaohongshu']
+        platforms: ['bilibili', 'douyin']
       },
       manualTrigger: {
         productCount: 7,
@@ -172,6 +172,53 @@ class SystemConfig {
       { key: 'ai_recommendation_threshold', value: config.aiModel.recommendationThreshold, type: 'number', description: 'AI推荐阈值', group: 'ai_workbench' },
       { key: 'ai_recommendation_strategy', value: config.aiModel.recommendationStrategy, type: 'string', description: 'AI推荐策略', group: 'ai_workbench' },
       { key: 'crawler_last_aweme_row_id', value: config.crawlerState?.lastAwemeRowId ?? 0, type: 'number', description: '爬虫库上次消费的最后一条ID', group: 'ai_workbench' }
+    ];
+
+    return await this.setBatch(configs);
+  }
+
+  // 获取首页展示配置
+  static async getHomepageDisplayConfig() {
+    return {
+      aiProductIds: await this.getValue('homepage_ai_product_ids', []),
+      hotProductIds: await this.getValue('homepage_hot_product_ids', []),
+      latestProductIds: await this.getValue('homepage_latest_product_ids', []),
+      categoryIds: await this.getValue('homepage_category_ids', [])
+    };
+  }
+
+  // 保存首页展示配置
+  static async saveHomepageDisplayConfig(config) {
+    await this.deleteByKey('homepage_hero_product_ids');
+    const configs = [
+      {
+        key: 'homepage_ai_product_ids',
+        value: config.aiProductIds || [],
+        type: 'json',
+        description: '首页热门推荐商品ID列表',
+        group: 'homepage_display'
+      },
+      {
+        key: 'homepage_hot_product_ids',
+        value: config.hotProductIds || [],
+        type: 'json',
+        description: '首页人气单品商品ID列表',
+        group: 'homepage_display'
+      },
+      {
+        key: 'homepage_latest_product_ids',
+        value: config.latestProductIds || [],
+        type: 'json',
+        description: '首页新品上架商品ID列表',
+        group: 'homepage_display'
+      },
+      {
+        key: 'homepage_category_ids',
+        value: config.categoryIds || [],
+        type: 'json',
+        description: '首页分类会场分类ID列表',
+        group: 'homepage_display'
+      }
     ];
 
     return await this.setBatch(configs);

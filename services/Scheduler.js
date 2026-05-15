@@ -66,11 +66,11 @@ class Scheduler {
     try {
       const port = process.env.PORT || 3000
       const baseURL = process.env.SCHEDULER_BASE_URL || `http://localhost:${port}`
-      console.log('[Scheduler] 触发AI分析(定时模式): POST /api/aweme/analyze')
-      await axios.post(`${baseURL}/api/aweme/analyze`, { scheduled: true })
-      console.log('[Scheduler] AI分析触发完成')
+      console.log('[Scheduler] 触发AI选品流水线(定时模式): POST /api/keyword-trends/pipeline/run')
+      await axios.post(`${baseURL}/api/keyword-trends/pipeline/run`, { mode: 'scheduled' })
+      console.log('[Scheduler] AI选品流水线触发完成')
     } catch (e) {
-      console.error('[Scheduler] 触发AI分析失败:', e?.response?.data || e.message)
+      console.error('[Scheduler] 触发AI选品流水线失败:', e?.response?.data || e.message)
     }
   }
 }

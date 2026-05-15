@@ -7,16 +7,25 @@
     "dev": "node start.js",
     "test": "node test_api.js",
     "test-db": "node test_db_connection.js",
-    "install-deps": "npm install"
+    "install-deps": "npm install",
+    "db:bootstrap-foundation": "node scripts/bootstrap-mall-foundation.js",
+    "db:reset-categories": "node scripts/reset-categories.js",
+    "db:reset-spec-templates": "node scripts/reset-spec-templates.js",
+    "db:reset-lightweight-sku-demo": "node scripts/reset-lightweight-sku-demo.js",
+    "db:upgrade-lightweight-sku": "node scripts/upgrade-lightweight-sku.js",
+    "db:setup-order-alipay-fields": "node scripts/setup-order-alipay-fields.js",
+    "crawler:douyin-login": "node scripts/bootstrap-douyin-login.js",
+    "crawler:init-db": "node crawler/init-db.js",
+    "crawler:server": "node crawler/start.js",
+    "crawler:run": "node crawler/run.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
-    "openai": "^4.57.0",
     "axios": "^1.5.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "~1.4.4",
     "cors": "^2.8.5",
     "debug": "~2.6.9",
+    "dotenv": "^16.4.5",
     "express": "~4.16.1",
     "http-errors": "~1.6.3",
     "jade": "~1.11.0",
@@ -25,6 +34,8 @@
     "morgan": "~1.9.1",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.6.0",
+    "openai": "^4.57.0",
+    "playwright": "^1.54.2",
     "sharp": "^0.34.4"
   }
 }

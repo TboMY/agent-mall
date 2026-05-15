@@ -1,8 +1,16 @@
 const { query } = require('../config/database');
 
 class ProductSpecification {
+  static async execute(sql, params = [], connection = null) {
+    if (connection) {
+      const [rows] = await connection.query(sql, params);
+      return rows;
+    }
+    return query(sql, params);
+  }
+
   // 获取商品的规格列表
-  static async getByProductId(productId) {
+  static async getByProductId(productId, connection = null) {
     const sql = `
       SELECT 
         ps.*,
@@ -19,11 +27,11 @@ class ProductSpecification {
       WHERE ps.product_id = ?
       ORDER BY pa.sort_order ASC
     `;
-    return await query(sql, [productId]);
+    return await this.execute(sql, [productId], connection);
   }
 
   // 创建商品规格
-  static async create(data) {
+  static async create(data, connection = null) {
     const {
       product_id,
       attribute_id,
@@ -35,12 +43,12 @@ class ProductSpecification {
       INSERT INTO product_specifications (product_id, attribute_id, attribute_value_id, custom_value)
       VALUES (?, ?, ?, ?)
     `;
-    const result = await query(sql, [product_id, attribute_id, attribute_value_id, custom_value]);
+    const result = await this.execute(sql, [product_id, attribute_id, attribute_value_id, custom_value], connection);
     return result.insertId;
   }
 
   // 批量创建商品规格
-  static async createBatch(specifications) {
+  static async createBatch(specifications, connection = null) {
     if (!specifications || specifications.length === 0) return [];
 
     // 构建批量插入的SQL
@@ -57,12 +65,12 @@ class ProductSpecification {
       spec.custom_value || null
     ]);
 
-    const result = await query(sql, valuesData);
+    const result = await this.execute(sql, valuesData, connection);
     return result.insertId;
   }
 
   // 更新商品规格
-  static async update(id, data) {
+  static async update(id, data, connection = null) {
     const { attribute_value_id, custom_value } = data;
     
     const sql = `
@@ -70,26 +78,26 @@ class ProductSpecification {
       SET attribute_value_id = ?, custom_value = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
-    const result = await query(sql, [attribute_value_id, custom_value, id]);
+    const result = await this.execute(sql, [attribute_value_id, custom_value, id], connection);
     return result.affectedRows > 0;
   }
 
   // 删除商品规格
-  static async delete(id) {
+  static async delete(id, connection = null) {
     const sql = `DELETE FROM product_specifications WHERE id = ?`;
-    const result = await query(sql, [id]);
+    const result = await this.execute(sql, [id], connection);
     return result.affectedRows > 0;
   }
 
   // 删除商品的所有规格
-  static async deleteByProductId(productId) {
+  static async deleteByProductId(productId, connection = null) {
     const sql = `DELETE FROM product_specifications WHERE product_id = ?`;
-    const result = await query(sql, [productId]);
+    const result = await this.execute(sql, [productId], connection);
     return result.affectedRows;
   }
 
   // 根据商品ID和属性ID获取规格
-  static async getByProductAndAttribute(productId, attributeId) {
+  static async getByProductAndAttribute(productId, attributeId, connection = null) {
     const sql = `
       SELECT 
         ps.*,
@@ -105,7 +113,7 @@ class ProductSpecification {
       LEFT JOIN product_attribute_values pav ON ps.attribute_value_id = pav.id
       WHERE ps.product_id = ? AND ps.attribute_id = ?
     `;
-    const result = await query(sql, [productId, attributeId]);
+    const result = await this.execute(sql, [productId, attributeId], connection);
     return result[0] || null;
   }
 

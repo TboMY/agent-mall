@@ -1,5 +1,6 @@
-const { query } = require('../config/database');
+const { query, transaction } = require('../config/database');
 const ProductSpecification = require('./ProductSpecification');
+const ProductSku = require('./ProductSku');
 
 class Product {
   // 获取商品列表（支持分页、搜索、筛选）
@@ -25,11 +26,13 @@ class Product {
         p.*,
         c.name as category_name,
         b.name as brand_name,
-        pt.name as product_type_name
+        pt.name as product_type_name,
+        COUNT(ps.id) as sku_count
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN brands b ON p.brand_id = b.id
       LEFT JOIN product_types pt ON p.product_type_id = pt.id
+      LEFT JOIN product_skus ps ON p.id = ps.product_id
       WHERE 1=1
     `;
     
@@ -69,7 +72,7 @@ class Product {
     const allowedSortFields = ['created_at', 'updated_at', 'price', 'heat_score', 'sales_count', 'view_count'];
     const sortField = allowedSortFields.includes(sort_by) ? sort_by : 'created_at';
     const order = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    sql += ` ORDER BY p.${sortField} ${order}`;
+    sql += ` GROUP BY p.id ORDER BY p.${sortField} ${order}`;
 
     // 分页 - 使用字符串拼接避免MySQL2参数化查询问题
     const offset = (pageNum - 1) * limitNum;
@@ -158,6 +161,7 @@ class Product {
       });
       
       product.specifications = specificationsObj;
+      product.skus = await ProductSku.getByProductId(id);
     }
     
     return product;
@@ -165,110 +169,124 @@ class Product {
 
   // 创建商品
   static async create(productData) {
-    const {
-      name,
-      description,
-      price,
-      original_price,
-      image,
-      images,
-      category_id,
-      brand_id,
+    return await transaction(async (connection) => {
+      const {
+        name,
+        description,
+        price,
+        original_price,
+        image,
+        images,
+        category_id,
+        brand_id,
       product_type_id,
       specifications,
-      sku,
-      stock,
       heat_score,
       is_ai_recommended,
       ai_recommendation,
       source_platform,
-      source_url,
-      tags,
-      status = 1,
-      ai_candidate_id // 新增：AI候选商品ID
-    } = productData;
+        source_url,
+        tags,
+        status = 1,
+        ai_candidate_id,
+        skus
+      } = productData;
 
-    const sql = `
-      INSERT INTO products (
-        name, description, price, original_price, image, images,
-        category_id, brand_id, product_type_id, sku, stock, heat_score,
-        is_ai_recommended, ai_recommendation, source_platform,
-        source_url, tags, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+      const sql = `
+        INSERT INTO products (
+          name, description, price, original_price, image, images,
+          category_id, brand_id, product_type_id, sku, stock, heat_score,
+          is_ai_recommended, ai_recommendation, source_platform,
+          source_url, tags, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
 
-    const params = [
-      name, 
-      description || '', 
-      price, 
-      original_price || null, 
-      image,
-      images ? JSON.stringify(images) : null,
-      category_id, 
-      brand_id || null, 
-      product_type_id || null, 
-      sku || '', 
-      stock || 0, 
-      heat_score || 0,
-      is_ai_recommended || 0, 
-      ai_recommendation || '', 
-      source_platform || '',
-      source_url || '', 
-      tags ? JSON.stringify(tags) : null, 
-      status
-    ];
+      const params = [
+        name,
+        description || '',
+        0,
+        null,
+        image,
+        images ? JSON.stringify(images) : null,
+        category_id,
+        brand_id || null,
+        product_type_id || null,
+        '',
+        0,
+        heat_score || 0,
+        is_ai_recommended || 0,
+        ai_recommendation || '',
+        source_platform || '',
+        source_url || '',
+        tags ? JSON.stringify(tags) : null,
+        status
+      ];
 
-    const result = await query(sql, params);
-    const productId = result.insertId;
+      const [result] = await connection.query(sql, params);
+      const productId = result.insertId;
 
-    // 处理规格信息
-    if (specifications && Object.keys(specifications).length > 0) {
-      await this.saveSpecifications(productId, specifications);
-    }
+      if (specifications && Object.keys(specifications).length > 0) {
+        await this.saveSpecifications(productId, specifications, connection);
+      }
 
-    // 如果是从AI推荐创建的，更新AI候选商品状态
-    if (ai_candidate_id) {
-      await this.updateAICandidateStatus(ai_candidate_id, productId);
-    }
+      const normalizedSkus = await ProductSku.replaceByProductId(
+        connection,
+        productId,
+        { name, image, status },
+        skus
+      );
+      await this.syncProductSummaryFromSkus(connection, productId, normalizedSkus);
 
-    return productId;
+      if (ai_candidate_id) {
+        await this.updateAICandidateStatus(ai_candidate_id, productId);
+      }
+
+      return productId;
+    });
   }
 
   // 更新商品
   static async update(id, productData) {
-    const fields = [];
-    const params = [];
-    const { specifications, ...otherData } = productData;
+    return await transaction(async (connection) => {
+      const fields = [];
+      const params = [];
+      const { specifications, skus, ...otherData } = productData;
 
-    // 动态构建更新字段
-    Object.keys(otherData).forEach(key => {
-      if (otherData[key] !== undefined) {
-        if (key === 'images' || key === 'tags') {
-          fields.push(`${key} = ?`);
-          params.push(JSON.stringify(otherData[key]));
-        } else {
-          fields.push(`${key} = ?`);
-          params.push(otherData[key]);
+      Object.keys(otherData).forEach(key => {
+        if (otherData[key] !== undefined) {
+          if (key === 'images' || key === 'tags') {
+            fields.push(`${key} = ?`);
+            params.push(JSON.stringify(otherData[key]));
+          } else {
+            fields.push(`${key} = ?`);
+            params.push(otherData[key]);
+          }
         }
+      });
+
+      if (fields.length > 0) {
+        fields.push('updated_at = NOW()');
+        params.push(id);
+        const sql = `UPDATE products SET ${fields.join(', ')} WHERE id = ?`;
+        await connection.query(sql, params);
       }
+
+      if (specifications !== undefined) {
+        await this.saveSpecifications(id, specifications, connection);
+      }
+
+      if (skus !== undefined) {
+        const [rows] = await connection.query(
+          'SELECT name, image, status FROM products WHERE id = ? LIMIT 1',
+          [id]
+        );
+        const currentProduct = rows[0];
+        const normalizedSkus = await ProductSku.replaceByProductId(connection, id, currentProduct, skus);
+        await this.syncProductSummaryFromSkus(connection, id, normalizedSkus);
+      }
+
+      return true;
     });
-
-    if (fields.length === 0) {
-      throw new Error('没有要更新的字段');
-    }
-
-    fields.push('updated_at = NOW()');
-    params.push(id);
-
-    const sql = `UPDATE products SET ${fields.join(', ')} WHERE id = ?`;
-    const result = await query(sql, params);
-    
-    // 处理规格信息
-    if (specifications !== undefined) {
-      await this.saveSpecifications(id, specifications);
-    }
-    
-    return result.affectedRows > 0;
   }
 
   // 删除商品
@@ -299,9 +317,7 @@ class Product {
 
   // 更新商品库存
   static async updateStock(id, stock) {
-    const sql = 'UPDATE products SET stock = ?, updated_at = NOW() WHERE id = ?';
-    const result = await query(sql, [stock, id]);
-    return result.affectedRows > 0;
+    throw new Error('请在 SKU 管理中调整库存');
   }
 
   // 增加商品浏览量
@@ -336,6 +352,33 @@ class Product {
     return await query(sql, []);
   }
 
+  // 根据一组商品 ID 获取商品，并按传入顺序返回
+  static async getByIds(ids = []) {
+    const normalizedIds = Array.from(
+      new Set((ids || []).map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))
+    );
+
+    if (!normalizedIds.length) {
+      return [];
+    }
+
+    const placeholders = normalizedIds.map(() => '?').join(',');
+    const rows = await query(
+      `SELECT
+        p.*,
+        c.name as category_name,
+        b.name as brand_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN brands b ON p.brand_id = b.id
+      WHERE p.id IN (${placeholders}) AND p.status = 1`,
+      normalizedIds
+    );
+
+    const rowMap = new Map(rows.map((item) => [Number(item.id), item]));
+    return normalizedIds.map((id) => rowMap.get(id)).filter(Boolean);
+  }
+
   // 获取热门商品
   static async getHotProducts(limit = 10) {
     const limitNum = parseInt(limit) || 10;
@@ -355,9 +398,9 @@ class Product {
   }
 
   // 保存商品规格信息
-  static async saveSpecifications(productId, specifications) {
+  static async saveSpecifications(productId, specifications, connection = null) {
     // 先删除现有规格
-    await ProductSpecification.deleteByProductId(productId);
+    await ProductSpecification.deleteByProductId(productId, connection);
     
     if (!specifications || Object.keys(specifications).length === 0) {
       return;
@@ -394,8 +437,25 @@ class Product {
 
     // 批量创建规格
     if (specificationsData.length > 0) {
-      await ProductSpecification.createBatch(specificationsData);
+      await ProductSpecification.createBatch(specificationsData, connection);
     }
+  }
+
+  // 由 SKU 汇总回写商品的价格、库存和默认编码
+  static async syncProductSummaryFromSkus(connection, productId, skus) {
+    const summary = ProductSku.summarizeForProduct(skus);
+    await connection.query(
+      `UPDATE products
+       SET price = ?, original_price = ?, stock = ?, sku = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [
+        summary.price,
+        summary.original_price,
+        summary.stock,
+        summary.sku,
+        productId
+      ]
+    );
   }
 
   // 更新AI候选商品状态（当从AI推荐创建正式商品时）

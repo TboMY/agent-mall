@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Brand = require('../models/Brand');
 const { validateBrand } = require('../middleware/validation');
+const { requirePermission } = require('../middleware/auth');
+const { PERMISSIONS } = require('../config/permissions');
 
 // 获取所有品牌
 router.get('/', async (req, res) => {
@@ -55,7 +57,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // 创建品牌
-router.post('/', validateBrand, async (req, res) => {
+router.post('/', requirePermission(PERMISSIONS.BRANDS_MANAGE), validateBrand, async (req, res) => {
   try {
     const brandId = await Brand.create(req.body);
     
@@ -75,7 +77,7 @@ router.post('/', validateBrand, async (req, res) => {
 });
 
 // 更新品牌
-router.put('/:id', validateBrand, async (req, res) => {
+router.put('/:id', requirePermission(PERMISSIONS.BRANDS_MANAGE), validateBrand, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -117,7 +119,7 @@ router.put('/:id', validateBrand, async (req, res) => {
 });
 
 // 删除品牌
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission(PERMISSIONS.BRANDS_MANAGE), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {

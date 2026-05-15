@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Category = require('../models/Category');
 const { validateCategory } = require('../middleware/validation');
+const { requirePermission } = require('../middleware/auth');
+const { PERMISSIONS } = require('../config/permissions');
 
 // 获取所有分类
 router.get('/', async (req, res) => {
@@ -35,6 +37,33 @@ router.get('/tree', async (req, res) => {
       success: false,
       message: '获取分类树失败',
       error: error.message
+    });
+  }
+});
+
+// 同级分类重排
+router.patch('/reorder', requirePermission(PERMISSIONS.CATEGORIES_MANAGE), async (req, res) => {
+  try {
+    const parentId = Number(req.body.parent_id || 0);
+    const orderedIds = Array.isArray(req.body.ordered_ids) ? req.body.ordered_ids : [];
+
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'ordered_ids 不能为空'
+      });
+    }
+
+    await Category.reorderSiblings(parentId, orderedIds);
+    res.json({
+      success: true,
+      message: '排序更新成功'
+    });
+  } catch (error) {
+    console.error('更新分类排序失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '更新分类排序失败'
     });
   }
 });
@@ -73,7 +102,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // 创建分类
-router.post('/', validateCategory, async (req, res) => {
+router.post('/', requirePermission(PERMISSIONS.CATEGORIES_MANAGE), validateCategory, async (req, res) => {
   try {
     const categoryId = await Category.create(req.body);
     
@@ -93,7 +122,7 @@ router.post('/', validateCategory, async (req, res) => {
 });
 
 // 更新分类
-router.put('/:id', validateCategory, async (req, res) => {
+router.put('/:id', requirePermission(PERMISSIONS.CATEGORIES_MANAGE), validateCategory, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -135,7 +164,7 @@ router.put('/:id', validateCategory, async (req, res) => {
 });
 
 // 删除分类
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission(PERMISSIONS.CATEGORIES_MANAGE), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {

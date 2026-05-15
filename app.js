@@ -15,6 +15,16 @@ var productAttributesRouter = require('./routes/productAttributes');
 var awemeRouter = require('./routes/aweme');
 var aiCandidatesRouter = require('./routes/aiCandidates');
 var systemConfigsRouter = require('./routes/systemConfigs');
+var keywordTrendsRouter = require('./routes/keywordTrends');
+var customerAuthRouter = require('./routes/customerAuth');
+var customerAddressesRouter = require('./routes/customerAddresses');
+var cartRouter = require('./routes/cart');
+var mallUsersRouter = require('./routes/mallUsers');
+var ordersRouter = require('./routes/orders');
+var customerOrdersRouter = require('./routes/customerOrders');
+var returnRequestsRouter = require('./routes/returnRequests');
+var paymentsRouter = require('./routes/payments');
+var rolesRouter = require('./routes/roles');
 var Scheduler = require('./services/Scheduler');
 
 var app = express();
@@ -42,6 +52,16 @@ app.use('/api/product-attributes', productAttributesRouter);
 app.use('/api/aweme', awemeRouter);
 app.use('/api/ai-candidates', aiCandidatesRouter);
 app.use('/api/system-configs', systemConfigsRouter);
+app.use('/api/keyword-trends', keywordTrendsRouter);
+app.use('/api/customer-auth', customerAuthRouter);
+app.use('/api/customer-addresses', customerAddressesRouter);
+app.use('/api/cart', cartRouter);
+app.use('/api/mall-users', mallUsersRouter);
+app.use('/api/orders', ordersRouter);
+app.use('/api/customer-orders', customerOrdersRouter);
+app.use('/api/return-requests', returnRequestsRouter);
+app.use('/api/payments', paymentsRouter);
+app.use('/api/roles', rolesRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

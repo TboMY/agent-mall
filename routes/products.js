@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
+const ProductSku = require('../models/ProductSku');
 const Category = require('../models/Category');
 const Brand = require('../models/Brand');
+const CommercialKeyword = require('../models/CommercialKeyword');
 const { validateProduct } = require('../middleware/validation');
+const { requirePermission } = require('../middleware/auth');
+const { PERMISSIONS } = require('../config/permissions');
+const SystemConfig = require('../models/SystemConfig');
 
 // 获取商品列表
 router.get('/', async (req, res) => {
@@ -32,6 +37,94 @@ router.get('/', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取商品列表失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取AI推荐商品
+router.get('/ai/recommended', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const products = await Product.getAIRecommended(limit);
+    
+    res.json({
+      success: true,
+      data: products
+    });
+  } catch (error) {
+    console.error('获取AI推荐商品失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取AI推荐商品失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取首页展示商品配置
+router.get('/homepage-display', async (req, res) => {
+  try {
+    const config = await SystemConfig.getHomepageDisplayConfig();
+    const [aiProducts, hotProducts, latestProducts] = await Promise.all([
+      Product.getByIds(config.aiProductIds || []),
+      Product.getByIds(config.hotProductIds || []),
+      Product.getByIds(config.latestProductIds || [])
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        aiProducts,
+        hotProducts,
+        latestProducts,
+        categoryIds: config.categoryIds || []
+      }
+    });
+  } catch (error) {
+    console.error('获取首页展示商品失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取首页展示商品失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取首页展示的商业热点词
+router.get('/homepage-keywords', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 8;
+    const keywords = await CommercialKeyword.getHomepageKeywords(limit);
+    res.json({
+      success: true,
+      data: keywords
+    });
+  } catch (error) {
+    console.error('获取首页热点词失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取首页热点词失败',
+      error: error.message
+    });
+  }
+});
+
+// 获取热门商品
+router.get('/hot', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const products = await Product.getHotProducts(limit);
+    
+    res.json({
+      success: true,
+      data: products
+    });
+  } catch (error) {
+    console.error('获取热门商品失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取热门商品失败',
       error: error.message
     });
   }
@@ -70,8 +163,85 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// 获取商品SKU列表
+router.get('/:id/skus', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的商品ID'
+      });
+    }
+
+    const product = await Product.getById(id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: '商品不存在'
+      });
+    }
+
+    const skus = await ProductSku.getByProductId(id);
+    res.json({
+      success: true,
+      data: skus
+    });
+  } catch (error) {
+    console.error('获取商品SKU失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取商品SKU失败',
+      error: error.message
+    });
+  }
+});
+
+// 单独更新商品SKU列表
+router.put('/:id/skus', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的商品ID'
+      });
+    }
+
+    if (!Array.isArray(req.body?.skus) || req.body.skus.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '请提供至少一个SKU'
+      });
+    }
+
+    const existingProduct = await Product.getById(id);
+    if (!existingProduct) {
+      return res.status(404).json({
+        success: false,
+        message: '商品不存在'
+      });
+    }
+
+    await Product.update(id, { skus: req.body.skus });
+    const skus = await ProductSku.getByProductId(id);
+
+    res.json({
+      success: true,
+      message: 'SKU更新成功',
+      data: skus
+    });
+  } catch (error) {
+    console.error('更新商品SKU失败:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || '更新商品SKU失败'
+    });
+  }
+});
+
 // 创建商品
-router.post('/', validateProduct, async (req, res) => {
+router.post('/', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), validateProduct, async (req, res) => {
   try {
     const productId = await Product.create(req.body);
     
@@ -91,7 +261,7 @@ router.post('/', validateProduct, async (req, res) => {
 });
 
 // 更新商品
-router.put('/:id', validateProduct, async (req, res) => {
+router.put('/:id', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), validateProduct, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -133,7 +303,7 @@ router.put('/:id', validateProduct, async (req, res) => {
 });
 
 // 删除商品
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
@@ -166,7 +336,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // 批量删除商品
-router.delete('/', async (req, res) => {
+router.delete('/', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -193,7 +363,7 @@ router.delete('/', async (req, res) => {
 });
 
 // 更新商品状态
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { status } = req.body;
@@ -235,82 +405,17 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 // 更新商品库存
-router.patch('/:id/stock', async (req, res) => {
+router.patch('/:id/stock', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const { stock } = req.body;
-    
-    if (isNaN(id)) {
-      return res.status(400).json({
-        success: false,
-        message: '无效的商品ID'
-      });
-    }
-
-    if (typeof stock !== 'number' || stock < 0) {
-      return res.status(400).json({
-        success: false,
-        message: '库存必须是非负数'
-      });
-    }
-
-    const updated = await Product.updateStock(id, stock);
-    if (!updated) {
-      return res.status(404).json({
-        success: false,
-        message: '商品不存在或更新失败'
-      });
-    }
-
-    res.json({
-      success: true,
-      message: '商品库存更新成功'
+    return res.status(400).json({
+      success: false,
+      message: '商品总库存由 SKU 自动汇总，请在 SKU 管理中调整'
     });
   } catch (error) {
     console.error('更新商品库存失败:', error);
     res.status(500).json({
       success: false,
       message: '更新商品库存失败',
-      error: error.message
-    });
-  }
-});
-
-// 获取AI推荐商品
-router.get('/ai/recommended', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 10;
-    const products = await Product.getAIRecommended(limit);
-    
-    res.json({
-      success: true,
-      data: products
-    });
-  } catch (error) {
-    console.error('获取AI推荐商品失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取AI推荐商品失败',
-      error: error.message
-    });
-  }
-});
-
-// 获取热门商品
-router.get('/hot', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 10;
-    const products = await Product.getHotProducts(limit);
-    
-    res.json({
-      success: true,
-      data: products
-    });
-  } catch (error) {
-    console.error('获取热门商品失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '获取热门商品失败',
       error: error.message
     });
   }
