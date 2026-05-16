@@ -34,16 +34,6 @@ const productSchema = Joi.object({
   product_type_id: Joi.number().integer().positive().allow(null).messages({
     'number.positive': '规格模板ID必须是正整数'
   }),
-  specifications: Joi.object().pattern(
-    Joi.string(),
-    Joi.alternatives().try(
-      Joi.string(),
-      Joi.number(),
-      Joi.array().items(Joi.alternatives().try(Joi.string(), Joi.number()))
-    )
-  ).allow(null).messages({
-    'object.base': '规格信息必须是对象格式'
-  }),
   skus: Joi.array().items(
     Joi.object({
       sku_code: Joi.string().max(100).allow('', null),

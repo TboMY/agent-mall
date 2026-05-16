@@ -61,7 +61,7 @@ CREATE TABLE `ai_product_candidate`  (
   INDEX `idx_status_score`(`status` ASC, `hot_score` DESC) USING BTREE,
   INDEX `idx_linked_product`(`linked_product_id` ASC) USING BTREE,
   INDEX `idx_source_keyword`(`source_keyword` ASC) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'AI候选商品表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for banners
@@ -214,29 +214,6 @@ CREATE TABLE `product_recommendations`  (
   INDEX `idx_status`(`status` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品推荐表' ROW_FORMAT = Dynamic;
 
--- ----------------------------
--- Table structure for product_specifications
--- ----------------------------
-DROP TABLE IF EXISTS `product_specifications`;
-CREATE TABLE `product_specifications`  (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `product_id` int NOT NULL COMMENT '商品ID',
-  `attribute_id` int NOT NULL COMMENT '属性ID',
-  `attribute_value_id` int NULL DEFAULT NULL COMMENT '属性值ID(预定义值)',
-  `custom_value` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL COMMENT '自定义值',
-  `created_at` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_product_attribute`(`product_id` ASC, `attribute_id` ASC) USING BTREE,
-  INDEX `idx_product_id`(`product_id` ASC) USING BTREE,
-  INDEX `idx_attribute_id`(`attribute_id` ASC) USING BTREE,
-  INDEX `idx_attribute_value_id`(`attribute_value_id` ASC) USING BTREE,
-  CONSTRAINT `fk_product_specifications_attribute` FOREIGN KEY (`attribute_id`) REFERENCES `product_attributes` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
-  CONSTRAINT `fk_product_specifications_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
-  CONSTRAINT `fk_product_specifications_value` FOREIGN KEY (`attribute_value_id`) REFERENCES `product_attribute_values` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
-) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '商品规格表' ROW_FORMAT = Dynamic;
-
--- ----------------------------
 -- Table structure for product_types
 -- ----------------------------
 DROP TABLE IF EXISTS `product_types`;
@@ -283,7 +260,6 @@ CREATE TABLE `products`  (
   `status` tinyint(1) NULL DEFAULT 1 COMMENT '状态: 1=上架, 0=下架',
   `created_at` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `specifications` json NULL COMMENT '商品规格信息',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_category_id`(`category_id` ASC) USING BTREE,
   INDEX `idx_brand_id`(`brand_id` ASC) USING BTREE,

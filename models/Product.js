@@ -1,5 +1,4 @@
 const { query, transaction } = require('../config/database');
-const ProductSpecification = require('./ProductSpecification');
 const ProductSku = require('./ProductSku');
 
 class Product {
@@ -140,27 +139,6 @@ class Product {
     const [product] = await query(sql, [id]);
     
     if (product) {
-      // 获取商品规格信息
-      const specifications = await ProductSpecification.getByProductId(id);
-      
-      // 将规格信息转换为前端期望的格式
-      const specificationsObj = {};
-      specifications.forEach(spec => {
-        if (spec.value_type === 'multiple') {
-          // 多选类型，需要处理为数组
-          if (!specificationsObj[spec.attribute_id]) {
-            specificationsObj[spec.attribute_id] = [];
-          }
-          if (spec.attribute_value_id) {
-            specificationsObj[spec.attribute_id].push(spec.attribute_value_id);
-          }
-        } else {
-          // 单选或自定义类型
-          specificationsObj[spec.attribute_id] = spec.attribute_value_id || spec.custom_value;
-        }
-      });
-      
-      product.specifications = specificationsObj;
       product.skus = await ProductSku.getByProductId(id);
     }
     
@@ -175,12 +153,11 @@ class Product {
         description,
         price,
         original_price,
-        image,
-        images,
-        category_id,
-        brand_id,
+      image,
+      images,
+      category_id,
+      brand_id,
       product_type_id,
-      specifications,
       heat_score,
       is_ai_recommended,
       ai_recommendation,
@@ -225,10 +202,6 @@ class Product {
       const [result] = await connection.query(sql, params);
       const productId = result.insertId;
 
-      if (specifications && Object.keys(specifications).length > 0) {
-        await this.saveSpecifications(productId, specifications, connection);
-      }
-
       const normalizedSkus = await ProductSku.replaceByProductId(
         connection,
         productId,
@@ -250,7 +223,7 @@ class Product {
     return await transaction(async (connection) => {
       const fields = [];
       const params = [];
-      const { specifications, skus, ...otherData } = productData;
+      const { skus, ...otherData } = productData;
 
       Object.keys(otherData).forEach(key => {
         if (otherData[key] !== undefined) {
@@ -269,10 +242,6 @@ class Product {
         params.push(id);
         const sql = `UPDATE products SET ${fields.join(', ')} WHERE id = ?`;
         await connection.query(sql, params);
-      }
-
-      if (specifications !== undefined) {
-        await this.saveSpecifications(id, specifications, connection);
       }
 
       if (skus !== undefined) {
@@ -395,50 +364,6 @@ class Product {
       LIMIT ${limitNum}
     `;
     return await query(sql, []);
-  }
-
-  // 保存商品规格信息
-  static async saveSpecifications(productId, specifications, connection = null) {
-    // 先删除现有规格
-    await ProductSpecification.deleteByProductId(productId, connection);
-    
-    if (!specifications || Object.keys(specifications).length === 0) {
-      return;
-    }
-
-    // 准备规格数据
-    const specificationsData = [];
-    
-    for (const [attributeId, value] of Object.entries(specifications)) {
-      if (value !== null && value !== undefined && value !== '') {
-        if (Array.isArray(value)) {
-          // 多选类型
-          value.forEach(val => {
-            if (val !== null && val !== undefined && val !== '') {
-              specificationsData.push({
-                product_id: productId,
-                attribute_id: parseInt(attributeId),
-                attribute_value_id: typeof val === 'number' ? val : null,
-                custom_value: typeof val === 'string' ? val : null
-              });
-            }
-          });
-        } else {
-          // 单选或自定义类型
-          specificationsData.push({
-            product_id: productId,
-            attribute_id: parseInt(attributeId),
-            attribute_value_id: typeof value === 'number' ? value : null,
-            custom_value: typeof value === 'string' ? value : null
-          });
-        }
-      }
-    }
-
-    // 批量创建规格
-    if (specificationsData.length > 0) {
-      await ProductSpecification.createBatch(specificationsData, connection);
-    }
   }
 
   // 由 SKU 汇总回写商品的价格、库存和默认编码
