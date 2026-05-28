@@ -39,6 +39,13 @@ class ContentAnalysisService {
     const finalPlatforms = Array.isArray(platforms) && platforms.length > 0
       ? platforms
       : configuredPlatforms;
+    const resetCount = await SourceContentItem.resetStaleProcessing({
+      platforms: finalPlatforms,
+      staleMinutes: 15
+    });
+    if (resetCount > 0) {
+      console.warn(`[content-analysis] reset stale processing count=${resetCount} platforms=${finalPlatforms.join(',') || 'all'}`);
+    }
     const rows = await SourceContentItem.getPendingForAnalysis({
       platforms: finalPlatforms,
       limit: finalLimit
@@ -72,6 +79,11 @@ class ContentAnalysisService {
           tags
         });
         const videoUrl = aweme.play_url;
+        const coverUrl = aweme.cover_url;
+        const analysisMode = videoUrl
+          ? 'video'
+          : (coverUrl ? 'image' : 'text');
+        console.log(`[content-analysis] item start id=${aweme.id} platform=${aweme.platform} contentId=${aweme.platform_content_id} mode=${analysisMode}`);
         const content = videoUrl
           ? await LLM.chatWithVideo({
               system,
@@ -79,11 +91,18 @@ class ContentAnalysisService {
               videoUrl,
               responseFormat: 'json_object'
             })
-          : await LLM.chatJson({
-              system,
-              user: promptText,
-              responseFormat: 'json_object'
-            });
+          : coverUrl
+            ? await LLM.chatWithImage({
+                system,
+                text: promptText,
+                imageUrl: coverUrl,
+                responseFormat: 'json_object'
+              })
+            : await LLM.chatJson({
+                system,
+                user: promptText,
+                responseFormat: 'json_object'
+              });
 
         let parsed;
         try {
@@ -91,6 +110,7 @@ class ContentAnalysisService {
         } catch (error) {
           parsed = { is_valuable: false, product_info: {} };
         }
+        console.log(`[content-analysis] item parsed id=${aweme.id} valuable=${parsed.is_valuable} productName=${parsed.product_info?.name || '-'}`);
 
         let candidateId = null;
         if (parsed.is_valuable && parsed.product_info) {

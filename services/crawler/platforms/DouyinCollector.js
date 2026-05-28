@@ -124,7 +124,7 @@ class DouyinCollector {
     if (barrier.blocked) {
       await page.close().catch(() => null);
       throw new Error(
-        `抖音当前触发了验证码/安全验证（title=${barrier.pageTitle || '-'}）。请先用同一个 crawler profile 在可见窗口里完成一次验证，再重试采集。建议执行：npm run crawler:douyin-login`
+        `抖音当前触发了验证码/安全验证（title=${barrier.pageTitle || '-'}）。请先用同一个 crawler profile 在可见窗口里完成一次验证，再重试采集。`
       );
     }
     return page;
@@ -399,7 +399,7 @@ class DouyinCollector {
       console.log(`[douyin] keyword start keyword=${keyword} limit=${limit}`);
       const runtime = await this.getPageRuntime(page);
       if (runtime.hasUserLogin !== '1' && !runtime.xmst) {
-        throw new Error('抖音 crawler profile 当前没有有效登录态，请先执行 npm run crawler:douyin-login');
+        throw new Error('抖音 crawler profile 当前没有有效登录态，请先完成一次可见窗口登录后再重试');
       }
 
       let payload = null;
@@ -425,7 +425,7 @@ class DouyinCollector {
           const barrier = await this.detectVerificationBarrier(page);
           if (barrier.blocked) {
             throw new Error(
-              `抖音当前触发了验证码/安全验证（title=${barrier.pageTitle || title || '-'}）。请先用同一个 crawler profile 在可见窗口里完成一次验证，再重试采集。建议执行：npm run crawler:douyin-login -- --keyword "${keyword}"`
+              `抖音当前触发了验证码/安全验证（title=${barrier.pageTitle || title || '-'}）。请先用同一个 crawler profile 在可见窗口里完成一次验证，再重试采集。`
             );
           }
           throw new Error(`抖音搜索接口返回异常数据，keyword=${keyword}`);

@@ -32,6 +32,9 @@ function getServerConfig() {
  * 包括浏览器运行方式、无头模式、视频大小限制等。
  */
 function getBaseCollectorOptions(platform) {
+  const collectorMode = platform === 'douyin'
+    ? String(process.env.COLLECTOR_DOUYIN_MODE || 'playwright').trim().toLowerCase()
+    : 'default';
   const silentMode = platform === 'douyin'
     ? (process.env.COLLECTOR_DOUYIN_SILENT === 'true'
       ? true
@@ -53,9 +56,28 @@ function getBaseCollectorOptions(platform) {
   const maxVideoBytes = process.env.COLLECTOR_MAX_VIDEO_BYTES
     ? Number(process.env.COLLECTOR_MAX_VIDEO_BYTES)
     : Number(process.env.COLLECTOR_MAX_VIDEO_MB || 100) * 1024 * 1024;
+  const agentTaskTimeoutMs = platform === 'douyin'
+    ? Number(
+        process.env.COLLECTOR_DOUYIN_AGENT_TASK_TIMEOUT_MS
+        || process.env.COLLECTOR_AGENT_TASK_TIMEOUT_MS
+        || 900000
+      )
+    : undefined;
+  const resolvedTimeoutMs = platform === 'douyin' && collectorMode === 'agent'
+    ? agentTaskTimeoutMs
+    : Number(process.env.COLLECTOR_TIMEOUT_MS || 30000);
+  const agentBridgeTimeoutMs = platform === 'douyin'
+    ? Number(
+        process.env.COLLECTOR_DOUYIN_AGENT_TIMEOUT_MS
+        || process.env.COLLECTOR_AGENT_BRIDGE_TIMEOUT_MS
+        || (Number.isFinite(agentTaskTimeoutMs) ? agentTaskTimeoutMs + 120000 : 1020000)
+      )
+    : undefined;
 
   return {
-    timeoutMs: Number(process.env.COLLECTOR_TIMEOUT_MS || 30000),
+    collectorMode,
+    timeoutMs: resolvedTimeoutMs,
+    agentTaskTimeoutMs,
     maxVideoBytes: Number.isFinite(maxVideoBytes) && maxVideoBytes > 0
       ? maxVideoBytes
       : 100 * 1024 * 1024,
@@ -77,6 +99,31 @@ function getBaseCollectorOptions(platform) {
       : undefined,
     remoteDebuggingPort: platform === 'douyin'
       ? Number(process.env.COLLECTOR_DOUYIN_REMOTE_DEBUGGING_PORT || 9222)
+      : undefined,
+    agentBridgeUrl: platform === 'douyin'
+      ? (process.env.COLLECTOR_AGENT_BRIDGE_URL || 'http://127.0.0.1:3188')
+      : undefined,
+    agentBridgeEndpoint: platform === 'douyin'
+      ? (process.env.COLLECTOR_DOUYIN_AGENT_ENDPOINT || '/crawl/douyin')
+      : undefined,
+    agentBridgeTimeoutMs,
+    agentBridgeApiKey: platform === 'douyin'
+      ? (process.env.COLLECTOR_AGENT_BRIDGE_API_KEY || '')
+      : undefined,
+    agentSessionProfile: platform === 'douyin'
+      ? (process.env.COLLECTOR_DOUYIN_AGENT_PROFILE || 'douyin-default')
+      : undefined,
+    agentTaskName: platform === 'douyin'
+      ? (process.env.COLLECTOR_DOUYIN_AGENT_TASK || 'douyin_realtime_collect')
+      : undefined,
+    agentBatchLimit: platform === 'douyin'
+      ? Number(process.env.COLLECTOR_DOUYIN_AGENT_BATCH_LIMIT || process.env.COLLECTOR_AGENT_BATCH_LIMIT || 20)
+      : undefined,
+    agentKeywordBatchSize: platform === 'douyin'
+      ? Number(process.env.COLLECTOR_DOUYIN_AGENT_KEYWORD_BATCH_SIZE || process.env.COLLECTOR_AGENT_KEYWORD_BATCH_SIZE || 2)
+      : undefined,
+    agentBatchDelayMs: platform === 'douyin'
+      ? Number(process.env.COLLECTOR_DOUYIN_AGENT_BATCH_DELAY_MS || process.env.COLLECTOR_AGENT_BATCH_DELAY_MS || 1200)
       : undefined,
     silentMode
   };

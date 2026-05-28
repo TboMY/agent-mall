@@ -106,7 +106,7 @@ class SystemConfig {
       scheduledTask: {
         enabled: true,
         productCount: 15,
-        executionTime: '00:00',
+        executionTime: '09:00',
         platforms: ['bilibili', 'douyin']
       },
       manualTrigger: {
@@ -165,7 +165,7 @@ class SystemConfig {
     const configs = [
       { key: 'scheduled_task_enabled', value: config.scheduledTask.enabled, type: 'boolean', description: '定时任务是否启用', group: 'ai_workbench' },
       { key: 'scheduled_task_product_count', value: config.scheduledTask.productCount, type: 'number', description: '定时任务推送商品数量', group: 'ai_workbench' },
-      { key: 'scheduled_task_execution_time', value: config.scheduledTask.executionTime, type: 'string', description: '定时任务执行时间', group: 'ai_workbench' },
+      { key: 'scheduled_task_execution_time', value: config.scheduledTask.executionTime || '09:00', type: 'string', description: 'AI选品定时任务执行时间', group: 'ai_workbench' },
       { key: 'scheduled_task_platforms', value: config.scheduledTask.platforms, type: 'json', description: '定时任务数据来源平台', group: 'ai_workbench' },
       { key: 'manual_trigger_product_count', value: config.manualTrigger.productCount, type: 'number', description: '手动触发推送商品数量', group: 'ai_workbench' },
       { key: 'manual_trigger_platforms', value: config.manualTrigger.platforms, type: 'json', description: '手动触发数据来源平台', group: 'ai_workbench' },

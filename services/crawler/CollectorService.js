@@ -3,6 +3,7 @@ const CollectionRunLog = require('../../models/CollectionRunLog');
 const CommercialKeyword = require('../../models/CommercialKeyword');
 const BilibiliCollector = require('./platforms/BilibiliCollector');
 const DouyinCollector = require('./platforms/DouyinCollector');
+const DouyinAgentCollector = require('./platforms/DouyinAgentCollector');
 const { getBaseCollectorOptions, resolveRunInput, normalizeKeywords } = require('./CrawlerConfig');
 
 /**
@@ -13,8 +14,16 @@ class CollectorService {
   constructor() {
     this.collectors = {
       bilibili: options => new BilibiliCollector(options),
-      douyin: options => new DouyinCollector(options)
+      douyin: options => this.createDouyinCollector(options)
     };
+  }
+
+  createDouyinCollector(options = {}) {
+    const mode = String(options.collectorMode || 'playwright').trim().toLowerCase();
+    if (mode === 'agent') {
+      return new DouyinAgentCollector(options);
+    }
+    return new DouyinCollector(options);
   }
 
   /**

@@ -1,6 +1,63 @@
 const { query } = require('../config/database');
 
 class AIProductCandidate {
+  static normalizeProductNameExpression() {
+    return `LOWER(
+      REPLACE(
+        REPLACE(
+          REPLACE(
+            REPLACE(
+              REPLACE(TRIM(COALESCE(product_name, '')), ' ', ''),
+            '-', ''),
+          '_', ''),
+        '（', '('),
+      '）', ')')
+    )`;
+  }
+
+  static buildFilterClause(options = {}) {
+    const {
+      search = '',
+      status = null,
+      product_name = null,
+      start_time = null,
+      end_time = null
+    } = options;
+
+    const clauses = ['1=1'];
+    const params = [];
+
+    if (search) {
+      clauses.push(`(product_name LIKE ? OR ai_reason LIKE ?)`);
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    if (status !== null) {
+      clauses.push(`status = ?`);
+      params.push(status);
+    }
+
+    if (product_name) {
+      clauses.push(`product_name LIKE ?`);
+      params.push(`%${product_name}%`);
+    }
+
+    if (start_time) {
+      clauses.push(`created_at >= ?`);
+      params.push(start_time);
+    }
+
+    if (end_time) {
+      clauses.push(`created_at <= ?`);
+      params.push(end_time);
+    }
+
+    return {
+      whereSql: clauses.join(' AND '),
+      params
+    };
+  }
+
   // 获取AI推荐候选商品列表（支持分页、搜索、筛选）
   static async getCandidates(options = {}) {
     const {
@@ -12,92 +69,93 @@ class AIProductCandidate {
       sort_by = 'created_at',
       sort_order = 'DESC',
       start_time = null,
-      end_time = null
+      end_time = null,
+      dedupe = true
     } = options;
 
     // 确保page和limit是数字类型
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 10;
-
-    let sql = `
-      SELECT *
-      FROM ai_product_candidate
-      WHERE 1=1
-    `;
-    
-    const params = [];
-
-    // 搜索条件
-    if (search) {
-      sql += ` AND (product_name LIKE ? OR ai_reason LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`);
-    }
-
-    // 状态筛选
-    if (status !== null) {
-      sql += ` AND status = ?`;
-      params.push(status);
-    }
-
-    // 商品名称筛选
-    if (product_name) {
-      sql += ` AND product_name LIKE ?`;
-      params.push(`%${product_name}%`);
-    }
-
-    // 时间范围筛选
-    if (start_time) {
-      sql += ` AND created_at >= ?`;
-      params.push(start_time);
-    }
-    if (end_time) {
-      sql += ` AND created_at <= ?`;
-      params.push(end_time);
-    }
+    const shouldDedupe = dedupe !== false && dedupe !== 'false' && dedupe !== 0 && dedupe !== '0';
+    const { whereSql, params } = this.buildFilterClause({
+      search,
+      status,
+      product_name,
+      start_time,
+      end_time
+    });
 
     // 排序
     const allowedSortFields = ['created_at', 'updated_at', 'hot_score'];
     const sortField = allowedSortFields.includes(sort_by) ? sort_by : 'created_at';
     const order = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    
-    sql += ` ORDER BY ${sortField} ${order}`;
 
     // 分页
     const offset = (pageNum - 1) * limitNum;
-    sql += ` LIMIT ${limitNum} OFFSET ${offset}`;
+    const normalizedNameExpr = this.normalizeProductNameExpression();
+
+    let sql;
+    let countSql;
+    if (shouldDedupe) {
+      sql = `
+        WITH ranked_candidates AS (
+          SELECT
+            *,
+            ${normalizedNameExpr} AS normalized_product_name,
+            COUNT(*) OVER (
+              PARTITION BY CASE
+                WHEN ${normalizedNameExpr} = '' THEN CONCAT('__empty__', id)
+                ELSE ${normalizedNameExpr}
+              END
+            ) AS duplicate_count,
+            ROW_NUMBER() OVER (
+              PARTITION BY CASE
+                WHEN ${normalizedNameExpr} = '' THEN CONCAT('__empty__', id)
+                ELSE ${normalizedNameExpr}
+              END
+              ORDER BY hot_score DESC, created_at DESC, id DESC
+            ) AS row_num
+          FROM ai_product_candidate
+          WHERE ${whereSql}
+        )
+        SELECT *
+        FROM ranked_candidates
+        WHERE row_num = 1
+        ORDER BY ${sortField} ${order}, id DESC
+        LIMIT ${limitNum} OFFSET ${offset}
+      `;
+
+      countSql = `
+        SELECT COUNT(*) AS total
+        FROM (
+          SELECT
+            CASE
+              WHEN ${normalizedNameExpr} = '' THEN CONCAT('__empty__', id)
+              ELSE ${normalizedNameExpr}
+            END AS dedupe_key
+          FROM ai_product_candidate
+          WHERE ${whereSql}
+          GROUP BY dedupe_key
+        ) AS deduped
+      `;
+    } else {
+      sql = `
+        SELECT *, 1 AS duplicate_count
+        FROM ai_product_candidate
+        WHERE ${whereSql}
+        ORDER BY ${sortField} ${order}, id DESC
+        LIMIT ${limitNum} OFFSET ${offset}
+      `;
+
+      countSql = `
+        SELECT COUNT(*) as total
+        FROM ai_product_candidate
+        WHERE ${whereSql}
+      `;
+    }
 
     const candidates = await query(sql, params);
-
-    // 获取总数
-    let countSql = `
-      SELECT COUNT(*) as total
-      FROM ai_product_candidate
-      WHERE 1=1
-    `;
-    const countParams = [];
-    
-    if (search) {
-      countSql += ` AND (product_name LIKE ? OR ai_reason LIKE ?)`;
-      countParams.push(`%${search}%`, `%${search}%`);
-    }
-    if (status !== null) {
-      countSql += ` AND status = ?`;
-      countParams.push(status);
-    }
-    if (product_name) {
-      countSql += ` AND product_name LIKE ?`;
-      countParams.push(`%${product_name}%`);
-    }
-    if (start_time) {
-      countSql += ` AND created_at >= ?`;
-      countParams.push(start_time);
-    }
-    if (end_time) {
-      countSql += ` AND created_at <= ?`;
-      countParams.push(end_time);
-    }
-
-    const [countResult] = await query(countSql, countParams);
+    const [countResult] = await query(countSql, params);
     const total = countResult.total;
 
     return {

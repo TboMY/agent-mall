@@ -332,6 +332,23 @@ class CommercialKeyword {
     };
   }
 
+  static async getAvailableCount({ platform = null } = {}) {
+    const params = [];
+    let sql = `
+      SELECT COUNT(*) AS total
+      FROM commercial_keywords
+      WHERE status = 'active'
+        AND (valid_until IS NULL OR valid_until >= NOW())
+        AND (
+          last_attempted_at IS NULL
+          OR last_attempted_at < DATE_SUB(NOW(), INTERVAL ${this.getRetryCooldownHours()} HOUR)
+        )
+    `;
+    sql = buildPlatformFilter(sql, params, platform);
+    const [row] = await query(sql, params);
+    return Number(row?.total || 0);
+  }
+
   /**
    * 获取首页可展示的近期商业热点词。
    */

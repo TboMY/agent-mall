@@ -23,7 +23,8 @@ router.get('/', async (req, res) => {
       sort_by: req.query.sort_by || 'created_at',
       sort_order: req.query.sort_order || 'DESC',
       start_time: req.query.start_time || null,
-      end_time: req.query.end_time || null
+      end_time: req.query.end_time || null,
+      dedupe: req.query.dedupe === undefined ? true : req.query.dedupe
     };
 
     const result = await AIProductCandidate.getCandidates(options);

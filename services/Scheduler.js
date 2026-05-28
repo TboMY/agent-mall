@@ -1,11 +1,17 @@
-const axios = require('axios')
 const SystemConfig = require('../models/SystemConfig')
+const WorkbenchPipelineService = require('./WorkbenchPipelineService')
 
-// 简单的定时任务调度器：根据配置的每天执行时间触发一次AI分析
+const DEFAULT_HOTLIST_REFRESH_TIMES = ['09:00', '15:00', '21:00']
+
+// 调度器：维护两类独立任务
+// 1. 热点池刷新：固定在 09:00 / 15:00 / 21:00 执行
+// 2. AI选品采集：按工作台配置的 executionTime 执行
 class Scheduler {
   constructor () {
-    this.currentTimer = null
-    this.lastPlannedAt = null
+    this.hotlistRefreshTimer = null
+    this.collectionTimer = null
+    this.lastHotlistRefreshAt = null
+    this.lastCollectionAt = null
   }
 
   async init () {
@@ -13,64 +19,123 @@ class Scheduler {
   }
 
   async reset () {
-    // 清理上一个未执行的任务
     this.clear()
 
     try {
       const cfg = await SystemConfig.getAIWorkbenchConfig()
-      const enabled = !!cfg?.scheduledTask?.enabled
-      const timeStr = cfg?.scheduledTask?.executionTime || '00:00'
-
-      if (!enabled) {
-        console.log('[Scheduler] 定时任务未启用，已跳过')
-        return
-      }
-
-      const nextTime = this.computeNextRunTime(timeStr)
-      const delayMs = Math.max(0, nextTime.getTime() - Date.now())
-      this.lastPlannedAt = nextTime
-
-      this.currentTimer = setTimeout(async () => {
-        this.currentTimer = null
-        await this.runOnceSafely()
-        // 运行完成后，按配置再次计划下一次
-        await this.reset()
-      }, delayMs)
-
-      console.log(`[Scheduler] 已安排下次AI分析时间: ${nextTime.toLocaleString()}`)
+      await this.scheduleHotlistRefresh()
+      await this.scheduleCollectionRun(cfg)
     } catch (e) {
       console.error('[Scheduler] 重置任务失败:', e)
     }
   }
 
   clear () {
-    if (this.currentTimer) {
-      clearTimeout(this.currentTimer)
-      this.currentTimer = null
+    if (this.hotlistRefreshTimer) {
+      clearTimeout(this.hotlistRefreshTimer)
+      this.hotlistRefreshTimer = null
+    }
+    if (this.collectionTimer) {
+      clearTimeout(this.collectionTimer)
+      this.collectionTimer = null
+    }
+    if (this.lastHotlistRefreshAt || this.lastCollectionAt) {
       console.log('[Scheduler] 已清理未执行的定时任务')
     }
+    this.lastHotlistRefreshAt = null
+    this.lastCollectionAt = null
   }
 
-  computeNextRunTime (hhmm) {
-    const [hh, mm] = String(hhmm || '00:00').split(':').map(s => parseInt(s, 10) || 0)
+  normalizeExecutionTimes (executionTimes, fallbackTime = '09:00') {
+    const times = Array.isArray(executionTimes) ? executionTimes : [fallbackTime]
+    const normalized = Array.from(new Set(
+      times
+        .map(value => String(value || '').trim())
+        .filter(value => /^\d{2}:\d{2}$/.test(value))
+    )).sort()
+
+    return normalized.length > 0 ? normalized : ['09:00', '15:00', '21:00']
+  }
+
+  getExecutionTimes () {
+    return [...DEFAULT_HOTLIST_REFRESH_TIMES]
+  }
+
+  normalizeSingleExecutionTime (executionTime, fallbackTime = '09:00') {
+    const value = String(executionTime || '').trim()
+    return /^\d{2}:\d{2}$/.test(value) ? value : fallbackTime
+  }
+
+  computeNextRunTime (executionTimes) {
     const now = new Date()
-    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0)
-    if (next.getTime() <= now.getTime()) {
-      // 已过今天时间，安排到明天
-      next.setDate(next.getDate() + 1)
+    const candidates = this.normalizeExecutionTimes(executionTimes).map(hhmm => {
+      const [hh, mm] = String(hhmm).split(':').map(s => parseInt(s, 10) || 0)
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0)
+    })
+    const todayFuture = candidates.find(item => item.getTime() > now.getTime())
+    if (todayFuture) {
+      return todayFuture
     }
-    return next
+    const nextDay = new Date(candidates[0])
+    nextDay.setDate(nextDay.getDate() + 1)
+    return nextDay
   }
 
-  async runOnceSafely () {
+  async scheduleHotlistRefresh () {
+    const executionTimes = this.getExecutionTimes()
+    const nextTime = this.computeNextRunTime(executionTimes)
+    const delayMs = Math.max(0, nextTime.getTime() - Date.now())
+    this.lastHotlistRefreshAt = nextTime
+
+    this.hotlistRefreshTimer = setTimeout(async () => {
+      this.hotlistRefreshTimer = null
+      await this.runHotlistRefreshSafely()
+      await this.scheduleHotlistRefresh()
+    }, delayMs)
+
+    console.log(`[Scheduler] 已安排下次热点池刷新时间: ${nextTime.toLocaleString()}，今日执行点: ${executionTimes.join(', ')}`)
+  }
+
+  async scheduleCollectionRun (cfg) {
+    const enabled = !!cfg?.scheduledTask?.enabled
+    const executionTime = this.normalizeSingleExecutionTime(cfg?.scheduledTask?.executionTime, '09:00')
+
+    if (!enabled) {
+      console.log('[Scheduler] AI选品定时任务未启用，已跳过')
+      return
+    }
+
+    const nextTime = this.computeNextRunTime([executionTime])
+    const delayMs = Math.max(0, nextTime.getTime() - Date.now())
+    this.lastCollectionAt = nextTime
+
+    this.collectionTimer = setTimeout(async () => {
+      this.collectionTimer = null
+      await this.runCollectionSafely()
+      const latestConfig = await SystemConfig.getAIWorkbenchConfig()
+      await this.scheduleCollectionRun(latestConfig)
+    }, delayMs)
+
+    console.log(`[Scheduler] 已安排下次AI选品执行时间: ${nextTime.toLocaleString()}，执行点: ${executionTime}`)
+  }
+
+  async runHotlistRefreshSafely () {
     try {
-      const port = process.env.PORT || 3000
-      const baseURL = process.env.SCHEDULER_BASE_URL || `http://localhost:${port}`
-      console.log('[Scheduler] 触发AI选品流水线(定时模式): POST /api/keyword-trends/pipeline/run')
-      await axios.post(`${baseURL}/api/keyword-trends/pipeline/run`, { mode: 'scheduled' })
-      console.log('[Scheduler] AI选品流水线触发完成')
+      console.log('[Scheduler] 触发热点池刷新任务')
+      await WorkbenchPipelineService.refreshKeywordPool()
+      console.log('[Scheduler] 热点池刷新任务触发完成')
     } catch (e) {
-      console.error('[Scheduler] 触发AI选品流水线失败:', e?.response?.data || e.message)
+      console.error('[Scheduler] 触发热点池刷新任务失败:', e?.response?.data || e.message)
+    }
+  }
+
+  async runCollectionSafely () {
+    try {
+      console.log('[Scheduler] 触发AI选品定时任务')
+      await WorkbenchPipelineService.runCollectionPipeline({ mode: 'scheduled' })
+      console.log('[Scheduler] AI选品定时任务触发完成')
+    } catch (e) {
+      console.error('[Scheduler] 触发AI选品定时任务失败:', e?.response?.data || e.message)
     }
   }
 }

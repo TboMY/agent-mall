@@ -1,5 +1,7 @@
 const axios = require('axios');
 
+const ALLOWED_HOTLIST_TYPES = ['douyin', 'weibo', 'zhihu'];
+
 /**
  * 热榜接口访问服务。
  * 负责向外部热榜 API 发请求，并把不同榜单的返回统一整理成内部可消费的关键词结构。
@@ -26,6 +28,9 @@ class HotlistService {
   async fetchHotlist(type) {
     if (!type) {
       throw new Error('缺少热榜 type 参数');
+    }
+    if (!ALLOWED_HOTLIST_TYPES.includes(type)) {
+      throw new Error(`当前仅支持以下热榜 type: ${ALLOWED_HOTLIST_TYPES.join(', ')}`);
     }
 
     const response = await this.http.get('/api/hotlist', {

@@ -3,21 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "node ./bin/www",
     "dev": "node start.js",
-    "test": "node test_api.js",
-    "test-db": "node test_db_connection.js",
-    "install-deps": "npm install",
-    "db:bootstrap-foundation": "node scripts/bootstrap-mall-foundation.js",
-    "db:reset-categories": "node scripts/reset-categories.js",
-    "db:reset-spec-templates": "node scripts/reset-spec-templates.js",
-    "db:reset-lightweight-sku-demo": "node scripts/reset-lightweight-sku-demo.js",
-    "db:upgrade-lightweight-sku": "node scripts/upgrade-lightweight-sku.js",
-    "db:setup-order-alipay-fields": "node scripts/setup-order-alipay-fields.js",
     "crawler:douyin-login": "node scripts/bootstrap-douyin-login.js",
-    "crawler:init-db": "node crawler/init-db.js",
-    "crawler:server": "node crawler/start.js",
-    "crawler:run": "node crawler/run.js"
+    "crawler:agent-bridge": "node crawler/start-agent-bridge.js"
   },
   "dependencies": {
     "axios": "^1.5.0",

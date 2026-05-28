@@ -80,6 +80,32 @@ class LLMService {
     return response.choices?.[0]?.message?.content;
   }
 
+  async chatWithImage({ task = 'video_analysis', system, text, imageUrl, responseFormat = 'json_object' }) {
+    const taskConfig = this.getTaskConfig(task);
+    if (!taskConfig.baseURL || !taskConfig.apiKey) {
+      throw new Error('LLM API 配置缺失: 请设置 LLM_API_BASE 与 LLM_API_KEY');
+    }
+    const client = this.getClient(taskConfig);
+
+    const messages = [];
+    if (system) messages.push({ role: 'system', content: system });
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: imageUrl } },
+        { type: 'text', text }
+      ]
+    });
+
+    const response = await client.chat.completions.create({
+      model: taskConfig.model || 'qwen3-vl-plus',
+      temperature: taskConfig.temperature,
+      response_format: responseFormat ? { type: responseFormat } : undefined,
+      messages
+    });
+    return response.choices?.[0]?.message?.content;
+  }
+
   /**
    * 获取某个任务当前使用的模型名，便于写入分析记录。
    */

@@ -172,6 +172,28 @@ class SourceContentItem {
     const result = await query(sql, ids);
     return result.affectedRows;
   }
+
+  static async resetStaleProcessing({ platforms = [], staleMinutes = 30 } = {}) {
+    const safeMinutes = Math.max(1, Number(staleMinutes) || 30);
+    const params = [safeMinutes];
+    let sql = `
+      UPDATE source_content_items
+      SET analysis_status = 0,
+          analysis_error = NULL,
+          updated_at = NOW()
+      WHERE analysis_status = 1
+        AND updated_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)
+    `;
+
+    if (Array.isArray(platforms) && platforms.length > 0) {
+      const placeholders = platforms.map(() => '?').join(',');
+      sql += ` AND platform IN (${placeholders})`;
+      params.push(...platforms);
+    }
+
+    const result = await query(sql, params);
+    return result.affectedRows;
+  }
 }
 
 module.exports = SourceContentItem;
