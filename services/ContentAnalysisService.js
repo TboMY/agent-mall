@@ -79,7 +79,9 @@ class ContentAnalysisService {
           tags
         });
         const videoUrl = aweme.play_url;
-        const coverUrl = aweme.cover_url;
+        const coverUrl = aweme.cover_url && !String(aweme.cover_url).startsWith('data:')
+          ? aweme.cover_url
+          : null;
         const analysisMode = videoUrl
           ? 'video'
           : (coverUrl ? 'image' : 'text');

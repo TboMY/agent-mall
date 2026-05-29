@@ -10,6 +10,24 @@ const { requirePermission } = require('../middleware/auth');
 const { PERMISSIONS } = require('../config/permissions');
 const SystemConfig = require('../models/SystemConfig');
 
+async function ensureProductCategorySelectable(categoryId) {
+  const category = await Category.getById(categoryId);
+
+  if (!category || Number(category.status) !== 1) {
+    const error = new Error('商品分类不存在或已禁用');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (Number(category.parent_id) === 0 || Number(category.level) <= 1) {
+    const error = new Error('商品只能选择二级分类');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return category;
+}
+
 // 获取商品列表
 router.get('/', async (req, res) => {
   try {
@@ -243,6 +261,7 @@ router.put('/:id/skus', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), async (r
 // 创建商品
 router.post('/', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), validateProduct, async (req, res) => {
   try {
+    await ensureProductCategorySelectable(req.body.category_id);
     const productId = await Product.create(req.body);
     
     res.status(201).json({
@@ -279,6 +298,8 @@ router.put('/:id', requirePermission(PERMISSIONS.PRODUCTS_MANAGE), validateProdu
         message: '商品不存在'
       });
     }
+
+    await ensureProductCategorySelectable(req.body.category_id);
 
     const updated = await Product.update(id, req.body);
     if (!updated) {

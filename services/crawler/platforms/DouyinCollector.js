@@ -270,6 +270,24 @@ class DouyinCollector {
     return items;
   }
 
+  summarizePayload(payload) {
+    const data = Array.isArray(payload?.data) ? payload.data : [];
+    return {
+      status_code: payload?.status_code ?? null,
+      has_more: payload?.has_more ?? null,
+      logid: payload?.extra?.logid || '',
+      data_length: data.length,
+      sample_item_keys: data.slice(0, 3).map(item => Object.keys(item || {})).flat().filter(Boolean).slice(0, 20),
+      sample_item_types: data.slice(0, 3).map(item => ({
+        aweme_info: Boolean(item?.aweme_info),
+        aweme_mix_info: Boolean(item?.aweme_mix_info),
+        common_aladdin: Boolean(item?.common_aladdin),
+        card_info: Boolean(item?.card_info),
+        type: item?.type || item?.aweme_info?.aweme_type || item?.aweme_mix_info?.mix_items?.[0]?.aweme_type || null
+      }))
+    };
+  }
+
   /**
    * 把抖音原始 aweme 数据转换为项目统一内容结构。
    */
@@ -434,6 +452,10 @@ class DouyinCollector {
         searchId = payload?.extra?.logid || searchId;
         const awemeItems = this.extractSearchItems(payload);
         console.log(`[douyin] page payload keyword=${keyword} offset=${offset} awemeCount=${awemeItems.length}`);
+        if (awemeItems.length === 0) {
+          const payloadSummary = this.summarizePayload(payload);
+          console.warn(`[douyin] empty aweme result keyword=${keyword} offset=${offset} summary=${JSON.stringify(payloadSummary)}`);
+        }
         if (awemeItems.length === 0) break;
 
         for (const awemeItem of awemeItems) {

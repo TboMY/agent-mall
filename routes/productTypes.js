@@ -8,6 +8,24 @@ const { requirePermission } = require('../middleware/auth');
 const { PERMISSIONS } = require('../config/permissions');
 const Joi = require('joi');
 
+async function ensureTemplateCategorySelectable(categoryId) {
+  const category = await Category.getById(categoryId);
+
+  if (!category || Number(category.status) !== 1) {
+    const error = new Error('所属分类不存在或已禁用');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (Number(category.parent_id) === 0 || Number(category.level) <= 1) {
+    const error = new Error('规格模板只能选择二级分类');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return category;
+}
+
 // 验证规则
 const productTypeSchema = Joi.object({
   category_id: Joi.number().integer().positive().required().messages({
@@ -104,13 +122,7 @@ router.get('/:id', async (req, res) => {
 // 创建商品类型
 router.post('/', requirePermission(PERMISSIONS.PRODUCT_TYPES_MANAGE), validate(productTypeSchema), async (req, res) => {
   try {
-    const category = await Category.getById(req.body.category_id);
-    if (!category) {
-      return res.status(400).json({
-        success: false,
-        message: '所属分类不存在'
-      });
-    }
+    await ensureTemplateCategorySelectable(req.body.category_id);
 
     const typeId = await ProductType.create(req.body);
     
@@ -133,13 +145,7 @@ router.post('/', requirePermission(PERMISSIONS.PRODUCT_TYPES_MANAGE), validate(p
 router.put('/:id', requirePermission(PERMISSIONS.PRODUCT_TYPES_MANAGE), validate(productTypeSchema), async (req, res) => {
   try {
     const { id } = req.params;
-    const category = await Category.getById(req.body.category_id);
-    if (!category) {
-      return res.status(400).json({
-        success: false,
-        message: '所属分类不存在'
-      });
-    }
+    await ensureTemplateCategorySelectable(req.body.category_id);
 
     const success = await ProductType.update(id, req.body);
     

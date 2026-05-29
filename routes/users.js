@@ -192,6 +192,13 @@ router.get('/', requirePermission(PERMISSIONS.USERS_MANAGE), async (req, res) =>
 
 router.post('/', requirePermission(PERMISSIONS.USERS_MANAGE), validate(adminUserSchema), async (req, res) => {
   try {
+    if (req.body.role === 'super_admin') {
+      return res.status(400).json({
+        success: false,
+        message: '不允许新增超级管理员账号'
+      });
+    }
+
     const exists = await AdminUser.getByUsername(req.body.username);
     if (exists) {
       return res.status(409).json({
@@ -239,6 +246,13 @@ router.put('/:id', requirePermission(PERMISSIONS.USERS_MANAGE), validate(adminUs
     const userWithSameName = await AdminUser.getByUsername(req.body.username);
     if (userWithSameName && Number(userWithSameName.id) !== id) {
       return res.status(409).json({ success: false, message: '用户名已存在' });
+    }
+
+    if (existing.role !== 'super_admin' && req.body.role === 'super_admin') {
+      return res.status(400).json({
+        success: false,
+        message: '不允许将管理员升级为超级管理员'
+      });
     }
 
     const role = await AdminRole.getByCode(req.body.role);

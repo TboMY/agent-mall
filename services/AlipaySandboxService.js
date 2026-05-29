@@ -1,6 +1,13 @@
 const crypto = require('crypto');
 const axios = require('axios');
 
+function maskValue(value, visible = 6) {
+  if (!value) return '';
+  const text = String(value);
+  if (text.length <= visible * 2) return text;
+  return `${text.slice(0, visible)}***${text.slice(-visible)}`;
+}
+
 function wrapPem(key, type) {
   if (!key) return '';
   const trimmed = String(key).trim();
@@ -24,6 +31,20 @@ class AlipaySandboxService {
       notifyUrl: process.env.ALIPAY_NOTIFY_URL || '',
       returnUrl: process.env.ALIPAY_RETURN_URL || '',
       orderReturnUrl: process.env.ALIPAY_ORDER_RETURN_URL || process.env.ALIPAY_RETURN_URL || ''
+    };
+  }
+
+  static getSafeConfigSnapshot() {
+    const config = this.getConfig();
+    return {
+      enabled: config.enabled,
+      appId: maskValue(config.appId, 4),
+      gateway: config.gateway,
+      notifyUrl: config.notifyUrl,
+      returnUrl: config.returnUrl,
+      orderReturnUrl: config.orderReturnUrl,
+      hasPublicKey: Boolean(config.publicKey),
+      hasPrivateKey: Boolean(config.privateKey)
     };
   }
 
@@ -90,6 +111,12 @@ class AlipaySandboxService {
 
   static buildPagePayUrl(payload) {
     const config = this.assertEnabled();
+    console.log('[alipay] build page pay url start', {
+      orderNo: payload.order_no,
+      amount: payload.amount,
+      subject: payload.subject,
+      config: this.getSafeConfigSnapshot()
+    });
     const params = this.buildCommonParams({
       method: 'alipay.trade.page.pay',
       notifyUrl: payload.notify_url,
@@ -104,11 +131,27 @@ class AlipaySandboxService {
     });
 
     params.sign = this.signParams(params);
-    return `${config.gateway}?${new URLSearchParams(params).toString()}`;
+    const url = `${config.gateway}?${new URLSearchParams(params).toString()}`;
+    console.log('[alipay] build page pay url done', {
+      orderNo: payload.order_no,
+      urlLength: url.length,
+      hasNotifyUrl: Boolean(params.notify_url),
+      hasReturnUrl: Boolean(params.return_url)
+    });
+    return url;
   }
 
   static async execute(method, bizContent, options = {}) {
     const config = this.assertEnabled();
+    console.log('[alipay] execute start', {
+      method,
+      bizContent,
+      options: {
+        notifyUrl: options.notifyUrl || '',
+        returnUrl: options.returnUrl || ''
+      },
+      config: this.getSafeConfigSnapshot()
+    });
     const params = this.buildCommonParams({
       method,
       notifyUrl: options.notifyUrl,
@@ -117,20 +160,42 @@ class AlipaySandboxService {
     });
     params.sign = this.signParams(params);
 
-    const response = await axios.post(
-      config.gateway,
-      new URLSearchParams(params).toString(),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
-        },
-        timeout: 15000
-      }
-    );
+    try {
+      const response = await axios.post(
+        config.gateway,
+        new URLSearchParams(params).toString(),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+          },
+          timeout: 15000
+        }
+      );
 
-    const data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
-    const responseKey = `${method.replace(/\./g, '_')}_response`;
-    return data?.[responseKey] || null;
+      const data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+      const responseKey = `${method.replace(/\./g, '_')}_response`;
+      const result = data?.[responseKey] || null;
+      console.log('[alipay] execute done', {
+        method,
+        httpStatus: response.status,
+        responseKey,
+        code: result?.code || null,
+        msg: result?.msg || null,
+        subCode: result?.sub_code || null,
+        subMsg: result?.sub_msg || null,
+        tradeStatus: result?.trade_status || null
+      });
+      return result;
+    } catch (error) {
+      console.error('[alipay] execute failed', {
+        method,
+        message: error.message,
+        code: error.code || null,
+        status: error.response?.status || null,
+        data: error.response?.data || null
+      });
+      throw error;
+    }
   }
 }
 

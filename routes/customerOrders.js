@@ -55,6 +55,10 @@ router.get('/by-order-no/:orderNo', async (req, res) => {
 
 router.post('/by-order-no/:orderNo/reconcile-payment', async (req, res) => {
   try {
+    console.log('[alipay] reconcile route hit', {
+      userId: req.customerAuth.user.id,
+      orderNo: req.params.orderNo
+    });
     const order = await Order.getByOrderNoForUser(req.params.orderNo, req.customerAuth.user.id);
     if (!order) {
       return res.status(404).json({
@@ -163,6 +167,10 @@ router.post('/direct', async (req, res) => {
 router.post('/:id/pay-alipay', async (req, res) => {
   try {
     const orderId = Number(req.params.id);
+    console.log('[alipay] pay route hit', {
+      userId: req.customerAuth.user.id,
+      orderId
+    });
     if (!orderId) {
       return res.status(400).json({
         success: false,
@@ -177,7 +185,7 @@ router.post('/:id/pay-alipay', async (req, res) => {
       data: payment
     });
   } catch (error) {
-    console.error('发起支付宝支付失败:', error);
+    console.error('[alipay] pay route failed:', error);
     res.status(400).json({
       success: false,
       message: error.message || '发起支付宝支付失败'

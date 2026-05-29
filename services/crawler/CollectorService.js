@@ -4,6 +4,7 @@ const CommercialKeyword = require('../../models/CommercialKeyword');
 const BilibiliCollector = require('./platforms/BilibiliCollector');
 const DouyinCollector = require('./platforms/DouyinCollector');
 const DouyinAgentCollector = require('./platforms/DouyinAgentCollector');
+const DouyinMockCollector = require('./platforms/DouyinMockCollector');
 const { getBaseCollectorOptions, resolveRunInput, normalizeKeywords } = require('./CrawlerConfig');
 
 /**
@@ -22,6 +23,9 @@ class CollectorService {
     const mode = String(options.collectorMode || 'playwright').trim().toLowerCase();
     if (mode === 'agent') {
       return new DouyinAgentCollector(options);
+    }
+    if (mode === 'mock') {
+      return new DouyinMockCollector(options);
     }
     return new DouyinCollector(options);
   }
@@ -78,12 +82,13 @@ class CollectorService {
     }
 
     const collector = this.createCollector(resolvedInput.platform, resolvedInput.options);
+    const collectorMode = String(getBaseCollectorOptions(resolvedInput.platform)?.collectorMode || 'default');
     const runId = await CollectionRunLog.create({
       platform: resolvedInput.platform,
       keywords: normalizedKeywords.join(','),
       limit: resolvedInput.limit
     });
-    console.log(`[collector] run created runId=${runId} platform=${resolvedInput.platform} keywordCount=${normalizedKeywords.length}`);
+    console.log(`[collector] run created runId=${runId} platform=${resolvedInput.platform} mode=${collectorMode} keywordCount=${normalizedKeywords.length}`);
     const attemptedCount = await CommercialKeyword.markAttemptedByKeywords(
       normalizedKeywords,
       resolvedInput.platform,

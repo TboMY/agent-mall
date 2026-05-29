@@ -4,6 +4,12 @@ const AlipaySandboxService = require('./AlipaySandboxService');
 
 class OrderPaymentService {
   static async reconcileOrderPayment(order) {
+    console.log('[alipay] reconcile order start', {
+      orderId: order?.id || null,
+      orderNo: order?.order_no || null,
+      paymentStatus: order?.payment_status || null,
+      status: order?.status || null
+    });
     if (!order) {
       throw new Error('订单不存在');
     }
@@ -14,6 +20,17 @@ class OrderPaymentService {
 
     const response = await AlipaySandboxService.execute('alipay.trade.query', {
       out_trade_no: order.order_no
+    });
+
+    console.log('[alipay] reconcile order query result', {
+      orderId: order.id,
+      orderNo: order.order_no,
+      code: response?.code || null,
+      msg: response?.msg || null,
+      subCode: response?.sub_code || null,
+      subMsg: response?.sub_msg || null,
+      tradeStatus: response?.trade_status || null,
+      totalAmount: response?.total_amount || null
     });
 
     if (!response || response.code !== '10000') {
@@ -40,11 +57,27 @@ class OrderPaymentService {
     });
 
     const latestOrder = await Order.getByOrderNo(order.order_no);
+    console.log('[alipay] reconcile order paid', {
+      orderId: latestOrder?.id || order.id,
+      orderNo: order.order_no,
+      paymentStatus: latestOrder?.payment_status || null,
+      status: latestOrder?.status || null
+    });
     return { reconciled: true, order: latestOrder };
   }
 
   static async handleNotify(payload) {
+    console.log('[alipay] notify received', {
+      orderNo: payload?.out_trade_no || null,
+      tradeNo: payload?.trade_no || null,
+      tradeStatus: payload?.trade_status || null,
+      totalAmount: payload?.total_amount || null
+    });
     if (!AlipaySandboxService.verifyParams(payload)) {
+      console.warn('[alipay] notify verify failed', {
+        orderNo: payload?.out_trade_no || null,
+        tradeNo: payload?.trade_no || null
+      });
       throw new Error('支付宝回调验签失败');
     }
 
@@ -57,6 +90,7 @@ class OrderPaymentService {
     }
 
     if (!['TRADE_SUCCESS', 'TRADE_FINISHED'].includes(tradeStatus)) {
+      console.log('[alipay] notify ignored by trade status', { orderNo, tradeStatus });
       return { ignored: true };
     }
 
@@ -67,6 +101,10 @@ class OrderPaymentService {
       }
 
       if (order.payment_status === 'paid') {
+        console.log('[alipay] notify skipped because already paid', {
+          orderId: order.id,
+          orderNo
+        });
         return;
       }
 
@@ -82,14 +120,31 @@ class OrderPaymentService {
       });
     });
 
+    console.log('[alipay] notify handled', { orderNo, tradeStatus });
     return { success: true };
   }
 
   static async refundOrder(order, reason = '退货退款') {
+    console.log('[alipay] refund start', {
+      orderId: order?.id || null,
+      orderNo: order?.order_no || null,
+      amount: order?.payable_amount || null,
+      reason
+    });
     const response = await AlipaySandboxService.execute('alipay.trade.refund', {
       out_trade_no: order.order_no,
       refund_amount: Number(order.payable_amount).toFixed(2),
       refund_reason: reason
+    });
+
+    console.log('[alipay] refund result', {
+      orderId: order.id,
+      orderNo: order.order_no,
+      code: response?.code || null,
+      msg: response?.msg || null,
+      subCode: response?.sub_code || null,
+      subMsg: response?.sub_msg || null,
+      refundFee: response?.refund_fee || null
     });
 
     if (!response || response.code !== '10000') {

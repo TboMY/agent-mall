@@ -213,16 +213,30 @@ class CustomerOrderService {
   }
 
   static async createAlipayPagePayment(userId, orderId) {
+    console.log('[alipay] create page payment start', { userId, orderId });
     const order = await Order.getByIdForUser(orderId, userId);
     if (!order) {
+      console.warn('[alipay] create page payment order missing', { userId, orderId });
       throw new Error('订单不存在');
     }
 
     if (order.payment_status === 'paid') {
+      console.warn('[alipay] create page payment already paid', {
+        userId,
+        orderId,
+        orderNo: order.order_no
+      });
       throw new Error('订单已支付，请勿重复付款');
     }
 
     if (order.status !== 'pending_payment' || order.payment_status !== 'unpaid') {
+      console.warn('[alipay] create page payment invalid status', {
+        userId,
+        orderId,
+        orderNo: order.order_no,
+        status: order.status,
+        paymentStatus: order.payment_status
+      });
       throw new Error('当前订单状态不允许支付');
     }
 
@@ -230,26 +244,46 @@ class CustomerOrderService {
       ? `${order.items[0].product_name}${order.items.length > 1 ? '等商品' : ''}`
       : `订单支付 ${order.order_no}`;
 
+    const paymentUrl = AlipaySandboxService.buildPagePayUrl({
+      order_no: order.order_no,
+      amount: order.payable_amount,
+      subject,
+      body: `订单 ${order.order_no} 支付`,
+      return_url: AlipaySandboxService.getConfig().orderReturnUrl
+    });
+
+    console.log('[alipay] create page payment done', {
+      userId,
+      orderId,
+      orderNo: order.order_no,
+      amount: order.payable_amount,
+      itemCount: order.items?.length || 0,
+      urlLength: paymentUrl.length
+    });
+
     return {
       order_id: order.id,
       order_no: order.order_no,
-      payment_url: AlipaySandboxService.buildPagePayUrl({
-        order_no: order.order_no,
-        amount: order.payable_amount,
-        subject,
-        body: `订单 ${order.order_no} 支付`,
-        return_url: AlipaySandboxService.getConfig().orderReturnUrl
-      })
+      payment_url: paymentUrl
     };
   }
 
   static async reconcileAlipayPayment(userId, orderNo) {
+    console.log('[alipay] reconcile payment start', { userId, orderNo });
     const order = await Order.getByOrderNoForUser(orderNo, userId);
     if (!order) {
+      console.warn('[alipay] reconcile payment order missing', { userId, orderNo });
       throw new Error('订单不存在');
     }
 
     const result = await OrderPaymentService.reconcileOrderPayment(order);
+    console.log('[alipay] reconcile payment done', {
+      userId,
+      orderNo,
+      reconciled: Boolean(result.reconciled),
+      paymentStatus: result.order?.payment_status || order.payment_status,
+      status: result.order?.status || order.status
+    });
     if (!result.order) {
       return result;
     }

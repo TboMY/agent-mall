@@ -8,6 +8,7 @@ let cachedContext = null;
 function resolveSignerPath() {
   const candidates = [
     path.resolve(process.cwd(), 'libs', 'douyin.js'),
+    path.resolve(process.cwd(), 'crawler', 'douyin.js'),
     path.resolve(process.cwd(), '..', 'MediaCrawler', 'libs', 'douyin.js')
   ];
 
